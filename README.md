@@ -4,7 +4,7 @@ Node Push Notify
 A Node.js module for interfacing with Apple Push Notification, Google Cloud Messaging, Microsoft Push Notification and Amazon Device Messaging services.
 
 ## Installation 
-$ npm install node-stratton
+$ npm install node-push-notify
 
 #Features
 <ul>

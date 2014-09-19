@@ -36,7 +36,8 @@
     "node-gcm": "*",
     "mpns" : "*",
     "node-parallel":"*",
-    "node-adm": "*"
+    "node-adm": "*",
+    "lodash": "*"
   },
   "engines": {
     "node": "*"

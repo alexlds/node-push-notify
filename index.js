@@ -3,15 +3,33 @@ var apn = require('apn');
 var mpns = require('mpns');
 var adm = require('node-adm');
 var Parallel = require('node-parallel');
-var SETTINGS = require('settings');
+var _ = require('lodash');
 
-var GCMSender = new gcm.Sender(SETTINGS.get('GCM_ID'));
-var APNOptions = {gateway: SETTINGS.get('APN_GATEWAY')};
-var APNConnection = new apn.Connection(APNOptions);
-var admoptions = {client_id: SETTINGS.get('ADM_CLIEND_ID'), client_secret: SETTINGS.get('ADM_CLIEND_SECRET')};
-var ADMSender = new adm.Sender(admoptions);
+var NotificationPusher = function NotificationPusher(options) {
+    this.settings = {
+        'GCM_ID': 'PUT-YOUR-GCM-SERVER-API-KEY',    
+        'GCM_MSGCNT': '1',
+        'GCM_RETRIES': 4,
+        'GCM_TIMETOLIVE': 3000, 
+        'GCM_DELAYWHILEIDLE' : false,
+        'APN_GATEWAY': 'gateway.sandbox.push.apple.com',
+        'APN_EXPIRY' : 3600, 
+        'APN_SOUND': 'ping.aiff',
+        "ADM_CLIEND_ID": 'PUT-YOUR-ADM-CLIENT-ID',
+        "ADM_CLIEND_SECRET": 'PUT-YOUR-ADM-CLIENT-SECRET'
+    };
 
-var sendPush = function(pushId, data, callback) {   
+    _.extend(this.settings, options);
+    return this;
+};
+
+NotificationPusher.prototype.send = function(pushId, data, callback) {   
+    var GCMSender = new gcm.Sender(this.settings.GCM_ID);
+    var APNOptions = {gateway: this.settings.APN_GATEWAY};
+    var APNConnection = new apn.Connection(APNOptions);
+    var admoptions = {client_id: this.settings.ADM_CLIEND_ID, client_secret: this.settings.ADM_CLIEND_SECRET};
+    var ADMSender = new adm.Sender(admoptions);
+    
     var regIdsGCM = [];
     var regIdsAPN = [];
     var regIdsMPNS = [];
@@ -40,14 +58,14 @@ var sendPush = function(pushId, data, callback) {
 
     if (regIdsGCM[0] != undefined){ 
         messageGCM = new gcm.Message({
-            delayWhileIdle: SETTINGS.get('GCM_DELAYWHILEIDLE'),
-            timeToLive: SETTINGS.get('GCM_TIMETOLIVE'),
+            delayWhileIdle: this.settings.GCM_DELAYWHILEIDLE,
+            timeToLive: this.settings.GCM_TIMETOLIVE,
             data: data
         });
-        messageGCM.addData('msgcnt', SETTINGS.get('GCM_MSGCNT'));
+        messageGCM.addData('msgcnt', this.settings.GCM_MSGCNT);
 
         parallel.add(function(done){
-            GCMSender.send(messageGCM, regIdsGCM, SETTINGS.get('GCM_RETRIES'), function (err, result) { 
+            GCMSender.send(messageGCM, regIdsGCM, this.settings.GCM_RETRIES, function (err, result) { 
             if (result.success === 1)
                 done(0,1);
             else
@@ -58,9 +76,9 @@ var sendPush = function(pushId, data, callback) {
     
     if (regIdsAPN[0] != undefined){
         messageAPN = new apn.Notification();
-        messageAPN.expiry = Math.floor(Date.now() / 1000) +  SETTINGS.get('APN_EXPIRY');    // 1 hour
-        messageAPN.badge = SETTINGS.get('GCM_MSGCNT');
-        messageAPN.sound = SETTINGS.get('APN_SOUND');
+        messageAPN.expiry = Math.floor(Date.now() / 1000) +  this.settings.APN_EXPIRY;    // 1 hour
+        messageAPN.badge = this.settings.GCM_MSGCNT;
+        messageAPN.sound = this.settings.APN_SOUND;
         messageAPN.alert = data.title;
         messageAPN.payload = data;
         
@@ -120,4 +138,4 @@ var sendPush = function(pushId, data, callback) {
     })
 };
 
-exports.sendPush = sendPush;
+module.exports = NotificationPusher;

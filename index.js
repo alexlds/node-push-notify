@@ -5,29 +5,29 @@ var adm = require('node-adm');
 var Parallel = require('node-parallel');
 var _ = require('lodash');
 
-var NotificationPusher = function NotificationPusher(options) {
-    this.settings = {
-        'GCM_ID': 'PUT-YOUR-GCM-SERVER-API-KEY',    
-        'GCM_MSGCNT': '1',
-        'GCM_RETRIES': 4,
-        'GCM_TIMETOLIVE': 3000, 
-        'GCM_DELAYWHILEIDLE' : false,
-        'APN_GATEWAY': 'gateway.sandbox.push.apple.com',
-        'APN_EXPIRY' : 3600, 
-        'APN_SOUND': 'ping.aiff',
-        "ADM_CLIEND_ID": 'PUT-YOUR-ADM-CLIENT-ID',
-        "ADM_CLIEND_SECRET": 'PUT-YOUR-ADM-CLIENT-SECRET'
-    };
+var settings = {
+    'GCM_ID': 'PUT-YOUR-GCM-SERVER-API-KEY',    
+    'GCM_MSGCNT': '1',
+    'GCM_RETRIES': 4,
+    'GCM_TIMETOLIVE': 3000, 
+    'GCM_DELAYWHILEIDLE' : false,
+    'APN_GATEWAY': 'gateway.sandbox.push.apple.com',
+    'APN_EXPIRY' : 3600, 
+    'APN_SOUND': 'ping.aiff',
+    "ADM_CLIEND_ID": 'PUT-YOUR-ADM-CLIENT-ID',
+    "ADM_CLIEND_SECRET": 'PUT-YOUR-ADM-CLIENT-SECRET'
+};
 
-    _.extend(this.settings, options);
+var NotificationPusher = function NotificationPusher(options) {
+    _.extend(settings, options);
     return this;
 };
 
-NotificationPusher.prototype.send = function(pushId, data, callback) {   
-    var GCMSender = new gcm.Sender(this.settings.GCM_ID);
-    var APNOptions = {gateway: this.settings.APN_GATEWAY};
+NotificationPusher.prototype.send = function(pushId, data, callback) { 
+    var GCMSender = new gcm.Sender(settings.GCM_ID);
+    var APNOptions = {gateway: settings.APN_GATEWAY};
     var APNConnection = new apn.Connection(APNOptions);
-    var admoptions = {client_id: this.settings.ADM_CLIEND_ID, client_secret: this.settings.ADM_CLIEND_SECRET};
+    var admoptions = {client_id: settings.ADM_CLIEND_ID, client_secret: settings.ADM_CLIEND_SECRET};
     var ADMSender = new adm.Sender(admoptions);
     
     var regIdsGCM = [];
@@ -39,9 +39,11 @@ NotificationPusher.prototype.send = function(pushId, data, callback) {
     var messageAPN = '';
 
     var parallel = new Parallel();  
-    parallel.timeout(3000);
+    parallel.timeout(10000);
 
-    if(!pushId.length) {
+    if(pushId instanceof Array) {
+        
+    } else if(pushId.length) {
         pushId = [pushId];
     }
 
@@ -58,27 +60,32 @@ NotificationPusher.prototype.send = function(pushId, data, callback) {
 
     if (regIdsGCM[0] != undefined){ 
         messageGCM = new gcm.Message({
-            delayWhileIdle: this.settings.GCM_DELAYWHILEIDLE,
-            timeToLive: this.settings.GCM_TIMETOLIVE,
+            collapseKey: 'demo',
+            delayWhileIdle: settings.GCM_DELAYWHILEIDLE,
+            timeToLive: settings.GCM_TIMETOLIVE,
             data: data
         });
-        messageGCM.addData('msgcnt', this.settings.GCM_MSGCNT);
+        messageGCM.addData('msgcnt', settings.GCM_MSGCNT);
 
         parallel.add(function(done){
-            GCMSender.send(messageGCM, regIdsGCM, this.settings.GCM_RETRIES, function (err, result) { 
-            if (result.success === 1)
-                done(0,1);
-            else
-                done(0, ' ANDROID: ' + (result.results)[0].error);
+            GCMSender.send(messageGCM, regIdsGCM, settings.GCM_RETRIES, function (err, result) { 
+                if(err) {
+                    done({device: 'android', message: err});
+                } else {
+                    if (result && result.success === 1)
+                        done(0,1);
+                    else
+                        done({device: 'android', message: (result.results)[0].error});
+                }
             });         
         })
     }
     
     if (regIdsAPN[0] != undefined){
         messageAPN = new apn.Notification();
-        messageAPN.expiry = Math.floor(Date.now() / 1000) +  this.settings.APN_EXPIRY;    // 1 hour
-        messageAPN.badge = this.settings.GCM_MSGCNT;
-        messageAPN.sound = this.settings.APN_SOUND;
+        messageAPN.expiry = Math.floor(Date.now() / 1000) +  settings.APN_EXPIRY;    // 1 hour
+        messageAPN.badge = settings.GCM_MSGCNT;
+        messageAPN.sound = settings.APN_SOUND;
         messageAPN.alert = data.title;
         messageAPN.payload = data;
         
@@ -86,16 +93,16 @@ NotificationPusher.prototype.send = function(pushId, data, callback) {
 
         parallel.add(function(done){
             apnConnection.on('error', function(){
-                done(0,' IOS: error');
+                done({device: 'ios', message: 'error'});
             });
             apnConnection.on('socketError', function(){
-                done(0,' IOS: socketError');
+                done({device: 'ios', message: 'socketError'});
             });
             apnConnection.on('transmissionError', function(){
-                done(0,' IOS: transmissionError' );
+                done({device: 'ios', message: 'transmissionError'});
             });
             apnConnection.on('cacheTooSmall', function(){
-                done(0,' IOS: cacheTooSmall');
+                done({device: 'ios', message: 'cacheTooSmall'});
             });
         })
     }
@@ -103,11 +110,11 @@ NotificationPusher.prototype.send = function(pushId, data, callback) {
     for (i = 0; i<regIdsMPNS.length; i++){
         var tempMPNS = regIdsMPNS[i];
         parallel.add(function(done){
-            mpns.sendToast(tempMPNS, data.title, data.message, data, function (result){
-                if (result === undefined)
+            mpns.sendToast(tempMPNS, data.title, data.message, data, function (err){
+                if (err === undefined)
                     done(0,1);
                 else
-                    done(0, ' Windows Phone: ' + result);               
+                    done({device: 'windows phone', message: err});
             });
         })
     }
@@ -116,11 +123,11 @@ NotificationPusher.prototype.send = function(pushId, data, callback) {
     for (i = 0; i<regIdsADM.length; i++){
         var tempADM = regIdsADM[i];
         parallel.add(function(done){
-            ADMSender.send(data, tempADM, function (result){
-                if (result === undefined)
+            ADMSender.send(data, tempADM, function (err){
+                if (err === undefined)
                     done(0,1);
                 else
-                    done(0, ' Amazon Phone: ' + result);
+                    done({device: 'amazon phone', message: err});
             });
         })
     }
@@ -132,9 +139,9 @@ NotificationPusher.prototype.send = function(pushId, data, callback) {
                 pushResult = pushResult + results[i];
         }
         if (pushResult.length > 1)
-            callback(pushResult);
-        else
-            callback(true);
+            callback(null, pushResult);
+        else 
+            callback(err);
     })
 };
 

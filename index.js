@@ -69,13 +69,14 @@ NotificationPusher.prototype.send = function(pushId, data, callback) {
 
         parallel.add(function(done){
             GCMSender.send(messageGCM, regIdsGCM, settings.GCM_RETRIES, function (err, result) { 
+                console.log('GCMSender.send', err, result);
                 if(err) {
                     done({device: 'android', message: err});
                 } else {
-                    if (result && result.success === 1)
-                        done(0,1);
+                    if (result && result.failure === 0)
+                        done(null , result.success);
                     else
-                        done({device: 'android', message: (result.results)[0].error});
+                        done({device: 'android', message: result.results});
                 }
             });         
         })
@@ -120,14 +121,26 @@ NotificationPusher.prototype.send = function(pushId, data, callback) {
     }
 
     //amazon
+    var AMZmesssage = {
+      data: data,
+      consolidationKey: 'demo',
+      expiresAfter: Math.floor(Date.now() / 1000) +  settings.APN_EXPIRY    // 1 hour
+    }
+
     for (i = 0; i<regIdsADM.length; i++){
         var tempADM = regIdsADM[i];
         parallel.add(function(done){
-            ADMSender.send(data, tempADM, function (err){
-                if (err === undefined)
-                    done(0,1);
-                else
+            ADMSender.send(AMZmesssage, tempADM, function (err, result){
+                if (err) {
+                    // No recoverable error
                     done({device: 'amazon phone', message: err});
+                }
+                if (result.error) {      
+                    // ADM Server error such as InvalidRegistrationId
+                    done({device: 'amazon phone', message: result.error});
+                } else if (result.registrationID) {
+                    done(0,1);
+                }
             });
         })
     }
